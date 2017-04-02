@@ -1,5 +1,5 @@
+#include "fd_hevc.h"
 #include "hevcfastdec.h"
-#include "fd_common.h"
 void hevc_fast_dec_create()
 {
 

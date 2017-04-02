@@ -1,6 +1,6 @@
 #ifndef _HEVCFASTDEC_H
 #define _HEVCFASTDEC_H
-#include "fd_common.h"
+#include <stdint.h>
 typedef struct Ctx_t
 {
     uint8_t got_frame;

@@ -10,6 +10,13 @@
 uint8_t *buf;
 uint64_t buf_size;
 
+static inline void *align_32_malloc(uint64_t size)
+{
+    while(size % 4 != 0)
+        size++;
+    return malloc(size);
+}
+
 int parse_opt_open_file(int argc, char * const *argv)
 {
     char filename[1024];
