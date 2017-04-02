@@ -1,13 +1,16 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include "hevcfastdec.h"
 #include <getopt.h>
 #include <stdlib.h>
 
-uint8_t *buf;
+#include "hevcfastdec.h"
 
-int parse_opt(int argc, char * const *argv)
+
+uint8_t *buf;
+uint64_t buf_size;
+
+int parse_opt_open_file(int argc, char * const *argv)
 {
     char filename[1024];
     char c;
@@ -25,16 +28,16 @@ int parse_opt(int argc, char * const *argv)
         goto ERR;
     }
     fseek(input, 0, SEEK_END);
-    uint64_t size = (uint64_t)ftell(input);
+    buf_size = (uint64_t)ftell(input);
     fseek(input, 0, SEEK_SET);
-    buf = (uint8_t *)malloc(sizeof(uint8_t) * size);
+    buf = (uint8_t *)align_32_malloc(sizeof(uint8_t) * buf_size);
     if(!buf)
     {
         fprintf(stderr, "Error malloc file buf\n");
         goto ERR;
     }
 
-    if(size != fread(buf, size, 1, input))
+    if(buf_size != fread(buf, buf_size, 1, input))
         goto ERR;
     fclose(input);
     return 0;
@@ -45,22 +48,27 @@ ERR:
     return -1;
 }
 
+void divide_nalus()
+{
+
+}
+
 int main(int argc, char * const *argv)
 {
     OutContext out;
-    if(parse_opt(argc, argv))
+    if(parse_opt_open_file(argc, argv))
         return -1;
 
-    void *ctx = hevc_fast_dec_create();
+    hevc_fast_dec_create();
+    divide_nalus();
 
-
-    hevc_fast_dec_decode(bs, bs_len, ctx, &out);
+    //hevc_fast_dec_decode(bs, bs_len, &out);
 
     if(out.got_frame)
     {
         //render
     }
-    hevc_fast_dec_free(ctx);
+    hevc_fast_dec_free();
     free(buf);
     return 0;
 }

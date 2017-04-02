@@ -1,6 +1,6 @@
 #ifndef _HEVCFASTDEC_H
 #define _HEVCFASTDEC_H
-#include "common.h"
+#include "fd_common.h"
 typedef struct Ctx_t
 {
     uint8_t got_frame;
@@ -11,12 +11,12 @@ typedef struct Ctx_t
 }OutContext;
 
 //create Decoder
-void* hevc_fast_dec_create();
+void hevc_fast_dec_create();
 
 //decode NALUs
-int hevc_fast_dec_decode(uint8_t *bs, uint64_t bs_len, void *ctx, OutContext *out);
+int hevc_fast_dec_decode(uint8_t *bs, uint64_t bs_len, OutContext *out);
 
 //free decoder
-int hevc_fast_dec_free(void *ctx);
+int hevc_fast_dec_free();
 
 #endif

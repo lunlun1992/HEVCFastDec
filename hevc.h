@@ -1,13 +1,7 @@
-#include "common.h"
-#include "dsp.h"
+#include "fd_common.h"
+#include "fd_dsp.h"
 
-typedef struct GetBitContext
-{
-    const uint8_t *buffer, *buffer_end;
-    int index;
-    int size_in_bits;
-    int size_in_bits_plus8;
-} GetBitContext;
+
 
 enum NALUnitType {
     NAL_TRAIL_N    = 0,

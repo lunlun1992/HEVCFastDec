@@ -3,7 +3,7 @@
 *.ko
 *.obj
 *.elf
-
+cmake-build-debug
 # Precompiled Headers
 *.gch
 *.pch
