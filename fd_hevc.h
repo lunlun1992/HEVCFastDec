@@ -1,7 +1,46 @@
 #include "fd_common.h"
 #include "fd_dsp.h"
+#include "fd_bitstream.h"
 
+#define MAX_DPB_SIZE 16 // A.4.1
+#define MAX_REFS 16
 
+#define MAX_NB_THREADS 16
+#define SHIFT_CTB_WPP 2
+
+/**
+ * 7.4.2.1
+ */
+#define MAX_SUB_LAYERS 7
+#define MAX_VPS_COUNT 16
+#define MAX_SPS_COUNT 32
+#define MAX_PPS_COUNT 256
+#define MAX_SHORT_TERM_RPS_COUNT 64
+#define MAX_CU_SIZE 128
+
+//TODO: check if this is really the maximum
+#define MAX_TRANSFORM_DEPTH 5
+
+#define MAX_TB_SIZE 32
+#define MAX_LOG2_CTB_SIZE 6
+#define MAX_QP 51
+#define DEFAULT_INTRA_TC_OFFSET 2
+
+#define HEVC_CONTEXTS 199
+
+#define MRG_MAX_NUM_CANDS     5
+
+#define L0 0
+#define L1 1
+
+#define EPEL_EXTRA_BEFORE 1
+#define EPEL_EXTRA_AFTER  2
+#define EPEL_EXTRA        3
+#define QPEL_EXTRA_BEFORE 3
+#define QPEL_EXTRA_AFTER  4
+#define QPEL_EXTRA        7
+
+#define EDGE_EMU_BUFFER_STRIDE 80
 
 enum NALUnitType {
     NAL_TRAIL_N    = 0,
@@ -640,6 +679,26 @@ typedef struct DBParams {
     int tc_offset;
 } DBParams;
 
+typedef struct FDPacket
+{
+    uint64_t pts;
+    uint64_t size;
+    uint8_t *data;
+}FDPacket;
+
+typedef struct FDFrame
+{
+    uint8_t *data[4];
+    int line_size[4];
+    int width;
+    int height;
+    int pic_type;   //0 progressive, 1 top, 2, bottom
+    int pic_struct;
+    int pkt_pts;
+    int pkt_dts;
+    struct HEVCContext *opeque;
+}FDFrame;
+
 typedef struct HEVCContext
 {
     //struct HEVCContext  *sList[MAX_NB_THREADS];
@@ -676,6 +735,9 @@ typedef struct HEVCContext
     DBParams *deblock;
     enum NALUnitType nal_unit_type;
     int temporal_id;  ///< temporal_id_plus1 - 1
+    uint8_t *rbsp_buffer;
+    uint64_t rbsp_buffer_size;
+    GetBitContext gb;
     //HEVCFrame *ref;
     //HEVCFrame DPB[32];
     int poc;
@@ -727,6 +789,7 @@ typedef struct HEVCContext
 
     const uint8_t *data;
 
+    FDPacket input_pkt;
     //H2645Packet pkt;
     // type of the first VCL NAL of the current frame
     //enum NALUnitType first_nal_type;
@@ -773,4 +836,7 @@ typedef struct HEVCContext
 }HEVCContext;
 
 
+HEVCContext *fd_hevc_init_context();
+int fd_hevc_decode_frame_single(HEVCContext *h, FDFrame *frame, uint8_t *got_picture);
+int fd_hevc_uninit_context(HEVCContext *ctx);
 

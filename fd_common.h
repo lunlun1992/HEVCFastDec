@@ -4,6 +4,15 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <memory.h>
+#include <stdio.h>
+
+#define BIT_DEPTH 8
+
+#define FF_PROFILE_HEVC_MAIN                        1
+#define FF_PROFILE_HEVC_MAIN_10                     2
+#define FF_PROFILE_HEVC_MAIN_STILL_PICTURE          3
+#define FF_PROFILE_HEVC_REXT                        4
 
 #if defined(__INTEL_COMPILER) && __INTEL_COMPILER < 1110 || defined(__SUNPRO_C)
 #   define DECLARE_ALIGNED(n,t,v)      t       __attribute__ ((aligned (n))) v
@@ -192,11 +201,50 @@ static av_always_inline av_const int64_t av_clip64_c(int64_t a, int64_t amin, in
 }
 
 
-static av_always_inline void *align_32_malloc(uint64_t size)
+static av_always_inline void *fd_malloc(uint64_t size)
 {
-    while(size % 4 != 0)
-        size++;
-    return malloc(size);
+    if(size > INT32_MAX - 32 || size <= 0)
+        return NULL;
+    char *ptr = (char *)malloc(size + 32);
+    if(!ptr)
+        return NULL;
+    char *p = ptr + 32;
+    p = (char *)((uintptr_t)p & (~0x1F));
+    char diff = (char)(p - ptr);
+    p[-1] = diff;
+    return p;
+}
+
+static av_always_inline void fd_free(void *ptr)
+{
+    if(ptr)
+        free((char *)ptr - ((char *)ptr)[-1]);
+}
+
+static av_always_inline void fd_mallocp(void **ptr, uint64_t size)
+{
+    if(*ptr)
+        return;
+    *ptr = fd_malloc(size);
+}
+
+static av_always_inline void fd_freep(void **ptr)
+{
+    if(!*ptr)
+        return;
+    fd_free(*ptr);
+    *ptr = NULL;
+}
+
+static av_always_inline void fd_fast_realloc(void **ptr, uint64_t *oldsize, uint64_t newsize)
+{
+    if(newsize <= *oldsize)
+        return;
+    fd_freep(ptr);
+    *ptr = fd_malloc(newsize);
+    if(!*ptr)
+        newsize = 0;
+    *oldsize = newsize;
 }
 
 #endif
