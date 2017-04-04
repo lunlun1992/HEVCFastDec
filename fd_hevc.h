@@ -345,8 +345,8 @@ typedef struct HEVCVPS {
     int vps_num_ticks_poc_diff_one; ///< vps_num_ticks_poc_diff_one_minus1 + 1
     int vps_num_hrd_parameters;
 
-    uint8_t data[4096];
-    int data_size;
+    //uint8_t data[4096];
+    //int data_size;
 } HEVCVPS;
 
 typedef struct ScalingList {
@@ -370,8 +370,7 @@ typedef struct HEVCSPS {
     int bit_depth;
     int pixel_shift;
 
-    //default YUV420p
-    //enum AVPixelFormat pix_fmt;
+    enum AVPixelFormat pix_fmt;
 
     unsigned int log2_max_poc_lsb;
     int pcm_enabled_flag;
@@ -441,13 +440,9 @@ typedef struct HEVCSPS {
     int min_pu_height;
     int tb_mask;
 
-    int hshift[3];
-    int vshift[3];
 
     int qp_bd_offset;
 
-    uint8_t data[4096];
-    int data_size;
 } HEVCSPS;
 
 typedef struct HEVCPPS {
@@ -835,6 +830,13 @@ typedef struct HEVCContext
 
 }HEVCContext;
 
+extern const uint8_t default_scaling_list_intra[64];
+extern const uint8_t default_scaling_list_inter[64];
+extern const uint8_t hevc_diag_scan4x4_x[16];
+extern const uint8_t hevc_diag_scan4x4_y[16];
+extern const uint8_t hevc_diag_scan8x8_x[64];
+extern const uint8_t hevc_diag_scan8x8_y[64];
+extern const Rational vui_sar[17];
 
 HEVCContext *fd_hevc_init_context();
 int fd_hevc_decode_frame_single(HEVCContext *h, FDFrame *frame, uint8_t *got_picture);

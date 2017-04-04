@@ -2,6 +2,8 @@
 #define _BITSTREAM_H
 #include "fd_common.h"
 
+extern const uint8_t golomb_vlc_len[512];
+extern const int8_t se_golomb_vlc_code[512];
 typedef struct GetBitContext
 {
     const uint8_t *buffer, *buffer_end;
@@ -115,47 +117,75 @@ static av_always_inline int get_bits_left(GetBitContext *gb)
 /**
  * 2. Golomb
  */
-static av_always_inline int get_ue_golomb(GetBitContext *gb)
+static av_always_inline unsigned int show_bits_long(GetBitContext *s, int n)
 {
-    register unsigned int buf;
+    if (n <= 25)
+        return show_bits(s, n);
+    else
+    {
+        GetBitContext gb = *s;
+        return get_bits_long(&gb, n);
+    }
+}
 
+//Read an unsigned Exp-Golomb code in the range 0 to UINT32_MAX-1.
+static av_always_inline unsigned get_ue_golomb_long(GetBitContext *gb)
+{
+    unsigned buf, log;
+
+    buf = show_bits_long(gb, 32);
+    log = 31 - fd_log2(buf);
+    skip_bits_long(gb, log);
+
+    return get_bits_long(gb, log + 1) - 1;
+}
+
+static av_always_inline int get_se_golomb(GetBitContext *s)
+{
+    unsigned int buf;
+
+    //OPEN_READER(re, gb);
+    //UPDATE_CACHE(re, gb);
+    //buf = GET_CACHE(re, gb);
     uint32_t re_index = s->index;
     uint32_t re_size_plus8 = s->size_in_bits_plus8;
     const uint8_t *re_buffer = s->buffer;
     uint32_t re_cache = (uint32_t)(re_buffer + (re_index >> 3)) << (re_index & 7);
+    buf = re_cache;
 
-    buf = re_cache >> (32 - n);
     if (buf >= (1 << 27)) {
         buf >>= 32 - 9;
-        LAST_SKIP_BITS(re, gb, ff_golomb_vlc_len[buf]);
-        CLOSE_READER(re, gb);
-
-        return ff_ue_golomb_vlc_code[buf];
+        //LAST_SKIP_BITS(re, gb, ff_golomb_vlc_len[buf]);
+        re_index = FFMIN(re_size_plus8, re_index + golomb_vlc_len[buf]);
+        //CLOSE_READER(re, gb);
+        s->index = re_index;
+        return se_golomb_vlc_code[buf];
     } else {
-        int log = 2 * av_log2(buf) - 31;
-        LAST_SKIP_BITS(re, gb, 32 - log);
-        CLOSE_READER(re, gb);
-        if (log < 7) {
-            fprintf(stderr, "Invalid UE golomb code\n");
-            return AVERROR_INVALIDDATA;
-        }
+        int log = fd_log2(buf), sign;
+        //LAST_SKIP_BITS(re, gb, 31 - log);
+        re_index = FFMIN(re_size_plus8, re_index + 31 - log);
+        //UPDATE_CACHE(re, gb);
+        re_cache = (uint32_t)(re_buffer + (re_index >> 3)) << (re_index & 7);
+        //buf = GET_CACHE(re, gb);
+        buf = re_cache;
         buf >>= log;
-        buf--;
+        //LAST_SKIP_BITS(re, gb, 32 - log);
+        re_index = FFMIN(re_size_plus8, re_index + 32 - log);
+        //CLOSE_READER(re, gb);
+        s->index = re_index;
+
+        sign = -(buf & 1);
+        buf  = ((buf >> 1) ^ sign) - sign;
 
         return buf;
     }
 }
 
-//Read an unsigned Exp-Golomb code in the range 0 to UINT32_MAX-1.
-static inline unsigned get_ue_golomb_long(GetBitContext *gb)
+static av_always_inline int get_se_golomb_long(GetBitContext *gb)
 {
-    unsigned buf, log;
-
-    buf = show_bits_long(gb, 32);
-    log = 31 - av_log2(buf);
-    skip_bits_long(gb, log);
-
-    return get_bits_long(gb, log + 1) - 1;
+    unsigned int buf = get_ue_golomb_long(gb);
+    int sign = (buf & 1) - 1;
+    return ((buf >> 1) ^ sign) + 1;
 }
 
 
