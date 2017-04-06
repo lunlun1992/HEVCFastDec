@@ -1,5 +1,9 @@
 #include <stdint.h>
-#include "fd_hevc.h"
+typedef struct Rational
+{
+    int num;
+    int den;
+}Rational;
 const uint8_t fd_log2_tab[256]={
         0,0,1,1,2,2,2,2,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,
         5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,

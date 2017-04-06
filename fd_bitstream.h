@@ -2,6 +2,13 @@
 #define _BITSTREAM_H
 #include "fd_common.h"
 
+union unaligned_32 { uint32_t l; } __attribute__((packed)) av_alias;
+#define AV_BSWAP16C(x) (((x) << 8 & 0xff00)  | ((x) >> 8 & 0x00ff))
+#define AV_BSWAP32C(x) (AV_BSWAP16C(x) << 16 | AV_BSWAP16C((x) >> 16))
+#define AV_BSWAP64C(x) (AV_BSWAP32C(x) << 32 | AV_BSWAP32C((x) >> 32))
+#define AV_RN32(p) (((const union unaligned_32 *) (p))->l)
+#define AV_RB32(p) AV_BSWAP32C(AV_RN32(p))
+
 extern const uint8_t golomb_vlc_len[512];
 extern const int8_t se_golomb_vlc_code[512];
 typedef struct GetBitContext
@@ -34,8 +41,8 @@ static av_always_inline uint32_t get_bits(GetBitContext *s, int n)
     uint32_t re_index = s->index;
     uint32_t re_size_plus8 = s->size_in_bits_plus8;
     const uint8_t *re_buffer = s->buffer;
-    uint32_t re_cache = (uint32_t)(re_buffer + (re_index >> 3)) << (re_index & 7);
-
+    uint32_t re_cache = AV_RB32(re_buffer + (re_index >> 3)) << (re_index & 7);
+    //printf("%x\n", re_cache);
     assert(n > 0 && n <= 25);
 
     tmp = re_cache >> (32 - n);
@@ -57,7 +64,7 @@ static av_always_inline uint32_t show_bits(GetBitContext *s, int n)
     register int tmp;
     uint32_t re_index = s->index;
     const uint8_t *re_buffer = s->buffer;
-    uint32_t re_cache = (uint32_t)(re_buffer + (re_index >> 3)) << (re_index & 7);
+    uint32_t re_cache = AV_RB32(re_buffer + (re_index >> 3)) << (re_index & 7);
 
     assert(n > 0 && n <= 25);
 
@@ -129,7 +136,7 @@ static av_always_inline unsigned int show_bits_long(GetBitContext *s, int n)
 }
 
 //Read an unsigned Exp-Golomb code in the range 0 to UINT32_MAX-1.
-static av_always_inline unsigned get_ue_golomb_long(GetBitContext *gb)
+static inline unsigned get_ue_golomb_long(GetBitContext *gb)
 {
     unsigned buf, log;
 
@@ -140,38 +147,31 @@ static av_always_inline unsigned get_ue_golomb_long(GetBitContext *gb)
     return get_bits_long(gb, log + 1) - 1;
 }
 
-static av_always_inline int get_se_golomb(GetBitContext *s)
+static inline int get_se_golomb(GetBitContext *s)
 {
     unsigned int buf;
 
-    //OPEN_READER(re, gb);
-    //UPDATE_CACHE(re, gb);
-    //buf = GET_CACHE(re, gb);
     uint32_t re_index = s->index;
     uint32_t re_size_plus8 = s->size_in_bits_plus8;
     const uint8_t *re_buffer = s->buffer;
-    uint32_t re_cache = (uint32_t)(re_buffer + (re_index >> 3)) << (re_index & 7);
+    uint32_t re_cache = AV_RB32(re_buffer + (re_index >> 3)) << (re_index & 7);
     buf = re_cache;
 
-    if (buf >= (1 << 27)) {
+    if (buf >= (1 << 27))
+    {
         buf >>= 32 - 9;
-        //LAST_SKIP_BITS(re, gb, ff_golomb_vlc_len[buf]);
         re_index = FFMIN(re_size_plus8, re_index + golomb_vlc_len[buf]);
-        //CLOSE_READER(re, gb);
         s->index = re_index;
         return se_golomb_vlc_code[buf];
-    } else {
+    }
+    else
+    {
         int log = fd_log2(buf), sign;
-        //LAST_SKIP_BITS(re, gb, 31 - log);
         re_index = FFMIN(re_size_plus8, re_index + 31 - log);
-        //UPDATE_CACHE(re, gb);
-        re_cache = (uint32_t)(re_buffer + (re_index >> 3)) << (re_index & 7);
-        //buf = GET_CACHE(re, gb);
+        re_cache = AV_RB32(re_buffer + (re_index >> 3)) << (re_index & 7);
         buf = re_cache;
         buf >>= log;
-        //LAST_SKIP_BITS(re, gb, 32 - log);
         re_index = FFMIN(re_size_plus8, re_index + 32 - log);
-        //CLOSE_READER(re, gb);
         s->index = re_index;
 
         sign = -(buf & 1);
@@ -181,7 +181,7 @@ static av_always_inline int get_se_golomb(GetBitContext *s)
     }
 }
 
-static av_always_inline int get_se_golomb_long(GetBitContext *gb)
+static inline int get_se_golomb_long(GetBitContext *gb)
 {
     unsigned int buf = get_ue_golomb_long(gb);
     int sign = (buf & 1) - 1;
@@ -212,6 +212,10 @@ static av_always_inline int init_get_bits(GetBitContext *s, const uint8_t *buffe
     return ret;
 }
 
+
+/**
+ * 3. Init
+ */
 static av_always_inline int init_get_bits8(GetBitContext *s, const uint8_t *buffer,
                                  int byte_size)
 {

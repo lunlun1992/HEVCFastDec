@@ -555,7 +555,6 @@ enum AVColorSpace {
 };
 #define AVCOL_SPC_YCGCO AVCOL_SPC_YCOCG
 
-
 extern const uint8_t fd_log2_tab[256];
 
 static av_always_inline av_const int32_t av_clipl_int32_c(int64_t a)
@@ -605,6 +604,14 @@ static av_always_inline void fd_mallocp(void **ptr, uint64_t size)
     if(*ptr)
         return;
     *ptr = fd_malloc(size);
+}
+
+static av_always_inline void fd_mallocz(void **ptr, uint64_t size)
+{
+    if(*ptr)
+        return;
+    *ptr = fd_malloc(size);
+    memset(*ptr, 0, size);
 }
 
 static av_always_inline void fd_freep(void **ptr)

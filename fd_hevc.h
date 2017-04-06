@@ -262,7 +262,6 @@ typedef struct Rational
     int num;
     int den;
 }Rational;
-
 typedef struct VUI {
     Rational sar;
 

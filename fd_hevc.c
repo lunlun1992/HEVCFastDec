@@ -5,6 +5,39 @@ static int fd_hevc_decode_nal_sei(HEVCContext *h)
     return 0;
 }
 
+static void fd_hevc_uninit_vps(HEVCVPS **p)
+{
+    if(!*p)
+        return;
+    fd_freep((void **)p);
+    *p = NULL;
+}
+
+static void fd_hevc_uninit_sps(HEVCSPS **p)
+{
+    if(!*p)
+        return;
+    fd_freep((void **)p);
+    *p = NULL;
+}
+
+static void fd_hevc_uninit_pps(HEVCPPS **p)
+{
+    if(!*p)
+        return;
+    fd_freep((void**)&(*p)->column_width);
+    fd_freep((void**)&(*p)->row_height);
+    fd_freep((void**)&(*p)->col_bd);
+    fd_freep((void**)&(*p)->col_idxX);
+    fd_freep((void**)&(*p)->row_height);
+    fd_freep((void**)&(*p)->row_bd);
+    fd_freep((void**)&(*p)->ctb_addr_ts_to_rs);
+    fd_freep((void**)&(*p)->ctb_addr_rs_to_ts);
+    fd_freep((void**)&(*p)->min_tb_addr_zs);
+    fd_freep((void**)&(*p)->min_tb_addr_zs_tab);
+    *p = NULL;
+}
+
 static int decode_profile_tier_level(GetBitContext *gb, PTLCommon *ptl)
 {
     int i;
@@ -172,6 +205,7 @@ static int fd_hevc_decode_nal_vps(GetBitContext *gb, HEVCContext *h)
     int i,j;
     int vps_id = 0;
     HEVCVPS *vps = fd_malloc(sizeof(HEVCVPS));
+    memset(vps, 0, sizeof(HEVCVPS));
     if (!vps)
         goto err;
 
@@ -273,7 +307,7 @@ static int fd_hevc_decode_nal_vps(GetBitContext *gb, HEVCContext *h)
     }
 
 
-    fd_free((void*)h->ps->vps);
+    fd_hevc_uninit_vps(&h->ps->vps_list[vps_id]);
     h->ps->vps_list[vps_id] = vps;
     return 0;
 
@@ -487,7 +521,7 @@ int ff_hevc_decode_short_term_rps(GetBitContext *gb, ShortTermRPS *rps, const HE
         }
 
         rps->num_delta_pocs    = k;
-        rps->num_negative_pics = (uint8_t)k0;
+        rps->num_negative_pics = (uint32_t)k0;
         // sort in increasing order (smallest first)
         if (rps->num_delta_pocs != 0)
         {
@@ -702,6 +736,7 @@ static void decode_vui(GetBitContext *gb, HEVCSPS *sps)
 static int fd_hevc_decode_nal_sps(GetBitContext *gb, HEVCContext *h)
 {
     HEVCSPS *sps = (HEVCSPS *)fd_malloc(sizeof(HEVCSPS));
+    memset(sps, 0, sizeof(HEVCSPS));
     unsigned int sps_id;
     int log2_diff_max_min_transform_block_size;
     int bit_depth_chroma, start, vui_present, sublayer_ordering_info;
@@ -1032,13 +1067,8 @@ static int fd_hevc_decode_nal_sps(GetBitContext *gb, HEVCContext *h)
         fprintf(stderr, "Overread SPS by %d bits\n", -get_bits_left(gb));
         return -1;
     }
-    fprintf(stderr, "Parsed SPS: id %d; coded wxh: %dx%d; cropped wxh: %dx%d;", sps_id, sps->width, sps->height, sps->output_width, sps->output_height);
-
-
-    /* check if this is a repeat of an already parsed SPS, then keep the
-     * original one.
-     * otherwise drop all PPSes that depend on it */
-    fd_free((void *)h->ps->sps_list[sps_id]);
+    fprintf(stderr, "Parsed SPS: id %d; coded wxh: %dx%d; cropped wxh: %dx%d\n", sps_id, sps->width, sps->height, sps->output_width, sps->output_height);
+    fd_hevc_uninit_sps(&h->ps->sps_list[sps_id]);
     h->ps->sps_list[sps_id] = sps;
 
     return 0;
@@ -1083,9 +1113,9 @@ static inline int setup_pps(GetBitContext *gb, HEVCPPS *pps, HEVCSPS *sps)
     int i, j, x, y, ctb_addr_rs, tile_id;
 
     // Inferred parameters
-    pps->col_bd   = fd_malloc((pps->num_tile_columns + 1) * sizeof(*pps->col_bd));
-    pps->row_bd   = fd_malloc((pps->num_tile_rows + 1) * sizeof(*pps->row_bd));
-    pps->col_idxX = fd_malloc(sps->ctb_width * sizeof(*pps->col_idxX));
+    fd_mallocp((void **)&pps->col_bd, (pps->num_tile_columns + 1) * sizeof(*pps->col_bd));
+    fd_mallocp((void **)&pps->row_bd, (pps->num_tile_rows + 1) * sizeof(*pps->row_bd));
+    fd_mallocp((void **)&pps->col_idxX, sps->ctb_width * sizeof(*pps->col_idxX));
     if (!pps->col_bd || !pps->row_bd || !pps->col_idxX)
         return -1;
 
@@ -1093,8 +1123,8 @@ static inline int setup_pps(GetBitContext *gb, HEVCPPS *pps, HEVCSPS *sps)
     {
         if (!pps->column_width)
         {
-            pps->column_width = fd_malloc(pps->num_tile_columns * sizeof(*pps->column_width));
-            pps->row_height   = fd_malloc(pps->num_tile_rows * sizeof(*pps->row_height));
+            fd_mallocp((void **)&pps->column_width, pps->num_tile_columns * sizeof(*pps->column_width));
+            fd_mallocp((void **)&pps->row_height, pps->num_tile_rows * sizeof(*pps->row_height));
         }
         if (!pps->column_width || !pps->row_height)
             return -1;
@@ -1125,10 +1155,10 @@ static inline int setup_pps(GetBitContext *gb, HEVCPPS *pps, HEVCSPS *sps)
      */
     pic_area_in_ctbs     = sps->ctb_width    * sps->ctb_height;
 
-    pps->ctb_addr_rs_to_ts = fd_malloc(pic_area_in_ctbs *sizeof(*pps->ctb_addr_rs_to_ts));
-    pps->ctb_addr_ts_to_rs = fd_malloc(pic_area_in_ctbs * sizeof(*pps->ctb_addr_ts_to_rs));
-    pps->tile_id           = fd_malloc(pic_area_in_ctbs * sizeof(*pps->tile_id));
-    pps->min_tb_addr_zs_tab = fd_malloc((sps->tb_mask+2) * (sps->tb_mask+2) * sizeof(*pps->min_tb_addr_zs_tab));
+    fd_mallocp((void **)&pps->ctb_addr_rs_to_ts, pic_area_in_ctbs *sizeof(*pps->ctb_addr_rs_to_ts));
+    fd_mallocp((void **)&pps->ctb_addr_ts_to_rs, pic_area_in_ctbs * sizeof(*pps->ctb_addr_ts_to_rs));
+    fd_mallocp((void **)&pps->tile_id, pic_area_in_ctbs * sizeof(*pps->tile_id));
+    fd_mallocp((void **)&pps->min_tb_addr_zs_tab, (sps->tb_mask+2) * (sps->tb_mask+2) * sizeof(*pps->min_tb_addr_zs_tab));
     if (!pps->ctb_addr_rs_to_ts || !pps->ctb_addr_ts_to_rs || !pps->tile_id || !pps->min_tb_addr_zs_tab)
         return -1;
 
@@ -1215,7 +1245,8 @@ static int fd_hevc_decode_nal_pps(GetBitContext *gb, HEVCContext *h)
     int i, ret = 0;
     unsigned int pps_id = 0;
 
-    HEVCPPS *pps = (HEVCPPS *)fd_malloc(sizeof(HEVCSPS));
+    HEVCPPS *pps = (HEVCPPS *)fd_malloc(sizeof(HEVCPPS));
+    memset(pps, 0, sizeof(HEVCPPS));
 
     if (!pps)
         return -1;
@@ -1321,8 +1352,8 @@ static int fd_hevc_decode_nal_pps(GetBitContext *gb, HEVCContext *h)
             goto err;
         }
 
-        pps->column_width = fd_malloc(pps->num_tile_columns * (sizeof(*pps->column_width)));
-        pps->row_height   = fd_malloc(pps->num_tile_rows * sizeof(*pps->row_height));
+        fd_mallocp((void **)&pps->column_width, pps->num_tile_columns * (sizeof(*pps->column_width)));
+        fd_mallocp((void **)&pps->row_height, pps->num_tile_rows * sizeof(*pps->row_height));
         if (!pps->column_width || !pps->row_height)
         {
             ret = -1;
@@ -1426,7 +1457,7 @@ static int fd_hevc_decode_nal_pps(GetBitContext *gb, HEVCContext *h)
         goto err;
     }
 
-    fd_free((void *)h->ps->pps_list[pps_id]);
+    fd_hevc_uninit_pps(&h->ps->pps_list[pps_id]);
     h->ps->pps_list[pps_id] = pps;
     return 0;
 
@@ -1652,8 +1683,8 @@ nsc:
             rbsp_len = di;
             ptr_bs = si;
         }
-        for(int i = 0; i < rbsp_len; i++)
-            printf("%02x\n", rbsp[i]);
+//        for(int i = 0; i < rbsp_len; i++)
+//            printf("%02x\n", rbsp[i]);
 
         while(rbsp_len && rbsp[rbsp_len - 1] == 0)
             rbsp_len--;
@@ -1671,6 +1702,8 @@ HEVCContext *fd_hevc_init_context()
 {
     HEVCContext *h = (HEVCContext *)fd_malloc(sizeof(HEVCContext));
     memset(h, 0, sizeof(HEVCContext));
+    fd_mallocz((void **)&h->ps, sizeof(HEVCParamSets));
+
     return h;
 
 }
@@ -1680,6 +1713,16 @@ int fd_hevc_decode_frame_single(HEVCContext *h, FDFrame *frame, uint8_t *got_pic
 }
 int fd_hevc_uninit_context(HEVCContext *ctx)
 {
+    if(ctx->ps)
+    {
+        for(int i = 0; i < 16; i++)
+            fd_freep((void **)&ctx->ps->vps_list[i]);
+        for(int i = 0; i < 32; i++)
+            fd_freep((void **)&ctx->ps->sps_list[i]);
+        for(int i = 0; i < 256; i++)
+            fd_freep((void **)&ctx->ps->pps_list[i]);
+        fd_freep((void **)&ctx->ps);
+    }
     fd_free(ctx);
     return 0;
 }

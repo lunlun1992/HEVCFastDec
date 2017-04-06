@@ -1,7 +1,5 @@
 #include "fd_hevc.h"
 #include "hevcfastdec.h"
-#include <stdio.h>
-#include <memory.h>
 void *hevc_fast_dec_create(FdInputContext *in)
 {
     HEVCContext *ctx = fd_hevc_init_context();
